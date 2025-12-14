@@ -32,6 +32,8 @@ livekit-plugins-turn-detector>=1.0.0
 python-dotenv>=1.0.0
 rich>=13.0.0
 aiofiles>=23.0.0
+paramiko>=3.4.0
+websockets>=12.0
 
 # Monitoring & Observability
 langfuse>=2.0.0

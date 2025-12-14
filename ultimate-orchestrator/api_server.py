@@ -7,8 +7,10 @@ Provides endpoints for agent orchestration, voice capabilities, and monitoring.
 
 from fastapi import FastAPI, HTTPException, WebSocket, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 import asyncio
 import os
@@ -19,6 +21,7 @@ from meta_orchestrator import MetaOrchestrator
 from voice_interface import VoiceAgentFactory, VoiceConfig
 from monitoring_dashboard import get_dashboard, Metric, MetricType
 from unified_config import get_config
+from livekit_voice import LiveKitIntegration, VoiceWebSocket
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -44,6 +47,16 @@ app.add_middleware(
 # Initialize orchestrator and monitoring
 orchestrator = MetaOrchestrator()
 dashboard = get_dashboard()
+
+# Initialize LiveKit voice integration
+livekit = LiveKitIntegration()
+voice_ws = VoiceWebSocket()
+
+# Mount static files for frontend
+frontend_path = Path(__file__).parent / "frontend"
+if frontend_path.exists():
+    app.mount("/static", StaticFiles(directory=str(frontend_path)), name="static")
+    print(f"✅ Frontend mounted at /static from {frontend_path}")
 
 # Request/Response Models
 class AgentRequest(BaseModel):
@@ -88,24 +101,30 @@ async def health_check():
         }
     }
 
-# Root endpoint
+# Root endpoint - Serve frontend
 @app.get("/")
 async def root():
-    """Root endpoint with API information"""
-    return {
-        "name": "Ultimate Orchestrator API",
-        "version": "1.0.0",
-        "status": "running",
-        "endpoints": {
-            "docs": "/docs",
-            "health": "/health",
-            "orchestrate": "/api/v1/orchestrate",
-            "discover": "/api/v1/discover",
-            "agents": "/api/v1/agents",
-            "monitoring": "/api/v1/monitoring",
-            "voice": "/api/v1/voice"
+    """Serve the futuristic frontend interface"""
+    frontend_index = Path(__file__).parent / "frontend" / "index.html"
+
+    if frontend_index.exists():
+        return FileResponse(str(frontend_index))
+    else:
+        # Fallback to API info if frontend not available
+        return {
+            "name": "Ultimate Orchestrator API",
+            "version": "1.0.0",
+            "status": "running",
+            "endpoints": {
+                "docs": "/docs",
+                "health": "/health",
+                "orchestrate": "/api/v1/orchestrate",
+                "discover": "/api/v1/discover",
+                "agents": "/api/v1/agents",
+                "monitoring": "/api/v1/monitoring",
+                "voice": "/api/v1/voice"
+            }
         }
-    }
 
 # Agent orchestration endpoint
 @app.post("/api/v1/orchestrate", response_model=AgentResponse)
@@ -297,6 +316,41 @@ async def get_config_summary():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ===== LIVEKIT VOICE ENDPOINTS =====
+
+@app.post("/api/v1/voice/create-session")
+async def create_voice_session(user_id: Optional[str] = None):
+    """Create a new LiveKit voice session"""
+    try:
+        result = await livekit.create_voice_session(user_id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/voice/end-session")
+async def end_voice_session(room_name: str):
+    """End a voice session"""
+    try:
+        result = await livekit.end_voice_session(room_name)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/voice/active-sessions")
+async def get_active_voice_sessions():
+    """Get all active voice sessions"""
+    try:
+        return {"sessions": livekit.get_active_sessions()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# WebSocket endpoint for voice streaming
+@app.websocket("/ws/voice/{user_id}")
+async def voice_websocket_endpoint(websocket: WebSocket, user_id: str):
+    """WebSocket endpoint for browser-based voice communication"""
+    await websocket.accept()
+    await voice_ws.handle_connection(websocket, user_id)
 
 # WebSocket endpoint for real-time updates
 @app.websocket("/ws/monitoring")
