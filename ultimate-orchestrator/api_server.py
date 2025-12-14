@@ -345,10 +345,17 @@ async def shutdown_event():
 # Main entry point
 if __name__ == "__main__":
     # Get configuration
+    # Render uses PORT, but also support SERVER_PORT for backwards compatibility
     host = os.getenv("SERVER_HOST", "0.0.0.0")
-    port = int(os.getenv("SERVER_PORT", "8000"))
-    workers = int(os.getenv("WORKERS", "4"))
+    port = int(os.getenv("PORT", os.getenv("SERVER_PORT", "8000")))
+    workers = int(os.getenv("WORKERS", "1"))  # Use 1 worker for free tier
     reload = os.getenv("ENVIRONMENT", "production") == "development"
+
+    print("=" * 80)
+    print(f"🚀 Starting Ultimate Orchestrator on {host}:{port}")
+    print(f"📊 Workers: {workers}")
+    print(f"🌍 Environment: {os.getenv('ENVIRONMENT', 'production')}")
+    print("=" * 80)
 
     # Run server
     uvicorn.run(
